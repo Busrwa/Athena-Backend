@@ -1,16 +1,15 @@
 """
-Athena — Piyasa Veri Servisi
-Hisseler, altın, gümüş, döviz, kripto, emtia
-Teknik analiz: RSI, MACD, Bollinger, Stochastic, ATR, Williams %R, OBV, VWAP
-Fundamental analiz: F/K, PD/DD, ROE, temettü verimi
+Athena — Piyasa Veri Servisi v2
+pandas KULLANILMAZ → Windows DLL sorununu çözer
+Saf Python ile: RSI, MACD, Bollinger, Stochastic, ATR, Williams %R, OBV, VWAP
 """
 import yfinance as yf
 import time
 from datetime import datetime
+from statistics import mean, stdev
 
 # ─── Sembol Listeleri ─────────────────────────────────────────────────────────
 
-# Geriye dönük uyumluluk için eski liste (kısa)
 POPULAR_BIST_STOCKS = [
     'THYAO', 'GARAN', 'AKBNK', 'EREGL', 'BIMAS',
     'ASELS', 'KRDMD', 'TUPRS', 'SISE', 'KCHOL',
@@ -22,23 +21,20 @@ POPULAR_BIST_STOCKS = [
     'NTHOL', 'ODAS', 'EUPWR', 'MAVI', 'BRSAN',
 ]
 
-# Kapsamlı BIST hisse listesi — tüm taranan semboller
-# yfinance üzerinden .IS uzantısıyla çekiliyor
 ALL_BIST_STOCKS = [
-    # ── BIST30 ─────────────────────────────────────────────────────────────
+    # BIST30
     'THYAO', 'GARAN', 'AKBNK', 'EREGL', 'BIMAS',
     'ASELS', 'KRDMD', 'TUPRS', 'SISE', 'KCHOL',
     'FROTO', 'TOASO', 'PGSUS', 'TAVHL', 'YKBNK',
     'SAHOL', 'ARCLK', 'ENKAI', 'EKGYO', 'TCELL',
     'ISCTR', 'VAKBN', 'HALKB', 'TTKOM', 'KOZAL',
     'KONTR', 'PETKM', 'MGROS', 'DOHOL', 'AKSEN',
-
-    # ── BIST100 ────────────────────────────────────────────────────────────
+    # BIST100+
     'HEKTS', 'VESTL', 'TKFEN', 'LOGO', 'NTHOL',
     'ODAS',  'EUPWR', 'MAVI',  'BRSAN', 'MOGAN',
     'AEFES', 'ALARK', 'ANACM', 'BERA',  'BTCIM',
     'CIMSA', 'CLEBI', 'CWENE', 'DOAS',  'EGEEN',
-    'ENJSA', 'EREGL', 'FENER', 'FLAP',  'GESAN',
+    'ENJSA', 'FENER', 'FLAP',  'GESAN',
     'GSDHO', 'GUBRF', 'INDES', 'ISGYO', 'ISMEN',
     'IZENR', 'JANTS', 'KAREL', 'KARTN', 'KATMR',
     'KAYSE', 'KCAER', 'KENT',  'KLRHO', 'KMPUR',
@@ -58,30 +54,26 @@ ALL_BIST_STOCKS = [
     'QUAGR', 'RAYSG', 'RHEAG', 'RNPOL', 'RODRG',
     'RTALB', 'RUBNS', 'RYSAS', 'SAFKR', 'SAGYO',
     'SARKY', 'SASA',  'SELEC', 'SEYKM', 'SILVR',
-    'SISE',  'SKBNK', 'SNGYO', 'SNKRN', 'SNPAM',
+    'SKBNK', 'SNGYO', 'SNKRN', 'SNPAM',
     'SODSN', 'SOKE',  'SOKM',  'SONME', 'SRVGY',
-    'SUMAS', 'SUWEN', 'TATGD', 'TATEN', 'TAVHL',
+    'SUMAS', 'SUWEN', 'TATGD', 'TATEN',
     'TBORG', 'TDGYO', 'TEKTU', 'TEZOL', 'TGSAS',
-    'TKFEN', 'TKNSA', 'TLMAN', 'TMSN',  'TNZTP',
-    'TOASO', 'TRCAS', 'TRGYO', 'TRILC', 'TSPOR',
+    'TKNSA', 'TLMAN', 'TMSN',  'TNZTP',
+    'TRCAS', 'TRGYO', 'TRILC', 'TSPOR',
     'TTRAK', 'TUCLK', 'TUDDF', 'TUKAS', 'TURGZ',
     'TURSG', 'ULKER', 'UMPAS', 'UNYEC', 'USAK',
-    'UZERB', 'VBTS',  'VERUS', 'VESTL', 'VKGYO',
+    'UZERB', 'VBTS',  'VERUS', 'VKGYO',
     'VKING', 'YAPRK', 'YATAS', 'YAYLA', 'YGYO',
     'YKSLN', 'YONGA', 'YUNSA', 'ZOREN', 'ZRGYO',
 ]
 
-# Altın, gümüş, döviz, kripto sembolleri
 COMMODITY_SYMBOLS = {
-    'ALTIN_USD':  'GC=F',   # Altın Vadeli (USD/ons)
-    'GUMUS_USD':  'SI=F',   # Gümüş Vadeli (USD/ons)
-    'PETROL_WTI': 'CL=F',   # Ham Petrol WTI
-    'DOGALGAZ':   'NG=F',   # Doğalgaz
-    'BAKIR':      'HG=F',   # Bakır
-    'PLATIN':     'PL=F',   # Platin
-    'PALMIYE':    'KO=F',   # Palm Yağı
-    'MISIR':      'ZC=F',   # Mısır
-    'BUGDAY':     'ZW=F',   # Buğday
+    'ALTIN_USD':  'GC=F',
+    'GUMUS_USD':  'SI=F',
+    'PETROL_WTI': 'CL=F',
+    'DOGALGAZ':   'NG=F',
+    'BAKIR':      'HG=F',
+    'PLATIN':     'PL=F',
 }
 
 FOREX_SYMBOLS = {
@@ -105,20 +97,17 @@ CRYPTO_SYMBOLS = {
     'ADA':  'ADA-USD',
     'DOT':  'DOT-USD',
     'LINK': 'LINK-USD',
-    'MATIC':'MATIC-USD',
 }
 
-# Endeksler
 INDEX_SYMBOLS = {
     'BIST100':  'XU100.IS',
     'BIST30':   'XU030.IS',
     'SP500':    '^GSPC',
     'NASDAQ':   '^IXIC',
     'DAX':      '^GDAXI',
-    'GOLD_TR':  'GLDTR.IS',   # Altın ETF BIST
+    'GOLD_TR':  'GLDTR.IS',
 }
 
-# Tarama için tüm sembol kategorileri
 ALL_SCAN_SYMBOLS = {
     'hisse':   ALL_BIST_STOCKS,
     'emtia':   list(COMMODITY_SYMBOLS.keys()),
@@ -127,35 +116,62 @@ ALL_SCAN_SYMBOLS = {
 }
 
 # ─── Bellek Cache ─────────────────────────────────────────────────────────────
-_price_cache: dict[str, dict] = {}
-_tech_cache:  dict[str, dict] = {}
-_fund_cache:  dict[str, dict] = {}
-_PRICE_TTL = 180    # 3 dakika
-_TECH_TTL  = 600    # 10 dakika
-_FUND_TTL  = 3600   # 1 saat
+_price_cache: dict = {}
+_tech_cache:  dict = {}
+_fund_cache:  dict = {}
+_PRICE_TTL = 180
+_TECH_TTL  = 600
+_FUND_TTL  = 3600
 
 
-def _cache_get(store: dict, key: str, ttl: int):
+def _cache_get(store, key, ttl):
     entry = store.get(key)
     if entry and (time.time() - entry['ts']) < ttl:
         return entry['data']
     return None
 
 
-def _cache_set(store: dict, key: str, data: dict):
+def _cache_set(store, key, data):
     store[key] = {'data': data, 'ts': time.time()}
+
+
+# ─── Saf Python EMA ─────────────────────────────────────────────────────────
+
+def _ema(values: list, span: int) -> list:
+    """Exponential moving average — pandas olmadan"""
+    if not values:
+        return []
+    k = 2.0 / (span + 1)
+    result = [values[0]]
+    for v in values[1:]:
+        result.append(v * k + result[-1] * (1 - k))
+    return result
+
+
+def _sma(values: list, period: int) -> list:
+    result = [None] * (period - 1)
+    for i in range(period - 1, len(values)):
+        result.append(mean(values[i - period + 1:i + 1]))
+    return result
+
+
+def _ewm_com(values: list, com: int) -> list:
+    """EMA with com parameter: alpha = 1/(1+com)"""
+    k = 1.0 / (1 + com)
+    result = [values[0]]
+    for v in values[1:]:
+        result.append(v * k + result[-1] * (1 - k))
+    return result
 
 
 # ─── Hisse Verisi ─────────────────────────────────────────────────────────────
 
 def get_stock_data(symbol: str) -> dict | None:
-    """Hisse fiyat verisi — 3 dk cache"""
     cached = _cache_get(_price_cache, symbol, _PRICE_TTL)
     if cached:
         return cached
 
     try:
-        # Özel semboller
         yf_symbol = symbol
         if symbol in FOREX_SYMBOLS:
             yf_symbol = FOREX_SYMBOLS[symbol]
@@ -200,7 +216,6 @@ def get_stock_data(symbol: str) -> dict | None:
 
 
 def get_commodity_data(name: str) -> dict | None:
-    """Altın, gümüş, petrol vb. emtia verisi"""
     yf_sym = COMMODITY_SYMBOLS.get(name)
     if not yf_sym:
         return None
@@ -218,7 +233,6 @@ def get_commodity_data(name: str) -> dict | None:
 
 
 def get_forex_data(pair: str = 'USDTRY') -> dict | None:
-    """Döviz kuru"""
     yf_sym = FOREX_SYMBOLS.get(pair, f"{pair}=X")
     try:
         t = yf.Ticker(yf_sym)
@@ -234,7 +248,6 @@ def get_forex_data(pair: str = 'USDTRY') -> dict | None:
 
 
 def get_crypto_data(symbol: str) -> dict | None:
-    """Kripto para verisi"""
     yf_sym = CRYPTO_SYMBOLS.get(symbol, f"{symbol}-USD")
     try:
         t = yf.Ticker(yf_sym)
@@ -250,10 +263,7 @@ def get_crypto_data(symbol: str) -> dict | None:
 
 
 def get_market_overview() -> dict:
-    """Genel piyasa özeti: BIST100, döviz, altın, kripto"""
     result = {}
-
-    # BIST endeksler
     for name, sym in INDEX_SYMBOLS.items():
         try:
             t = yf.Ticker(sym)
@@ -266,7 +276,6 @@ def get_market_overview() -> dict:
         except Exception as e:
             print(f"Endeks hatası ({name}): {e}")
 
-    # Döviz
     for pair in ['USDTRY', 'EURTRY', 'EURUSD']:
         try:
             d = get_forex_data(pair)
@@ -275,7 +284,6 @@ def get_market_overview() -> dict:
         except Exception as e:
             print(f"Döviz hatası ({pair}): {e}")
 
-    # Altın/Gümüş/Petrol
     for com in ['ALTIN_USD', 'GUMUS_USD', 'PETROL_WTI']:
         try:
             d = get_commodity_data(com)
@@ -284,7 +292,6 @@ def get_market_overview() -> dict:
         except Exception as e:
             print(f"Emtia hatası ({com}): {e}")
 
-    # Ana kripto
     for crypto in ['BTC', 'ETH']:
         try:
             d = get_crypto_data(crypto)
@@ -299,9 +306,6 @@ def get_market_overview() -> dict:
 # ─── Fundamental Analiz ───────────────────────────────────────────────────────
 
 def get_fundamental_data(symbol: str) -> dict:
-    """
-    Şirket temelleri: F/K, PD/DD, ROE, ROA, temettü, büyüme, borç/özsermaye
-    """
     cached = _cache_get(_fund_cache, symbol, _FUND_TTL)
     if cached:
         return cached
@@ -341,8 +345,6 @@ def get_fundamental_data(symbol: str) -> dict:
                 fund_score += 1; fund_notes.append(f'🟡 F/K {pe:.1f} — orta')
             elif pe > 40:
                 fund_score -= 2; fund_notes.append(f'⚠️ F/K {pe:.1f} — pahalı')
-            else:
-                fund_notes.append(f'🔵 F/K {pe:.1f}')
 
         if pb:
             if pb < 1:
@@ -408,15 +410,12 @@ def get_fundamental_data(symbol: str) -> dict:
         return {'symbol': symbol, 'fundamental_score': 0, 'fundamental_notes': [], 'error': str(e)}
 
 
-# ─── Teknik Analiz ────────────────────────────────────────────────────────────
+# ─── Teknik Analiz — saf Python ───────────────────────────────────────────────
 
 def get_technical_indicators(symbol: str, period: str = '1y') -> dict:
     """
-    Kapsamlı teknik analiz:
-    RSI (Wilder), MACD (12,26,9), Bollinger, EMA20/50/200,
-    Stochastic %K/%D, ATR (volatilite), Williams %R,
-    OBV (On-Balance Volume), Hacim analizi, Destek/Direnç,
-    Pivot noktaları, Trend gücü
+    Kapsamlı teknik analiz — pandas KULLANILMAZ.
+    RSI, MACD, Bollinger, EMA20/50/200, Stochastic, ATR, Williams %R, OBV
     """
     cached = _cache_get(_tech_cache, symbol, _TECH_TTL)
     if cached:
@@ -437,43 +436,53 @@ def get_technical_indicators(symbol: str, period: str = '1y') -> dict:
         if hist.empty or len(hist) < 50:
             return {'error': 'Yeterli veri yok (min 50 gün)', 'rsi': None, 'symbol': symbol}
 
-        close  = hist['Close']
-        high   = hist['High']
-        low    = hist['Low']
-        volume = hist['Volume']
-
+        close  = list(hist['Close'].values.tolist())
+        high   = list(hist['High'].values.tolist())
+        low    = list(hist['Low'].values.tolist())
+        volume = list(hist['Volume'].values.tolist())
+        opens  = list(hist['Open'].values.tolist())
         n = len(close)
 
-        # ── RSI (Wilder's Smoothing) ─────────────────────────────────────────
-        delta    = close.diff()
-        gain     = delta.clip(lower=0)
-        loss     = -delta.clip(upper=0)
-        avg_gain = gain.ewm(com=13, adjust=False).mean()
-        avg_loss = loss.ewm(com=13, adjust=False).mean()
-        rs       = avg_gain / avg_loss.replace(0, float('nan'))
-        rsi_series = 100 - (100 / (1 + rs))
-        rsi      = round(float(rsi_series.iloc[-1]), 1)
-        rsi_prev = round(float(rsi_series.iloc[-2]), 1)
-        rsi_5d   = round(float(rsi_series.iloc[-5:].mean()), 1)
+        cur = close[-1]
+
+        # ── RSI (EWM com=13 ≈ Wilder 14) ────────────────────────────────────
+        deltas = [close[i] - close[i-1] for i in range(1, n)]
+        gains  = [max(d, 0) for d in deltas]
+        losses = [-min(d, 0) for d in deltas]
+        avg_gain = _ewm_com(gains, 13)
+        avg_loss = _ewm_com(losses, 13)
+        rsi_list = []
+        for g, l in zip(avg_gain, avg_loss):
+            if l == 0:
+                rsi_list.append(100.0)
+            else:
+                rs = g / l
+                rsi_list.append(100 - 100 / (1 + rs))
+
+        rsi      = round(rsi_list[-1], 1)
+        rsi_prev = round(rsi_list[-2], 1) if len(rsi_list) > 1 else rsi
+        rsi_5d   = round(mean(rsi_list[-5:]), 1)
 
         # ── MACD (12, 26, 9) ────────────────────────────────────────────────
-        ema12       = close.ewm(span=12, adjust=False).mean()
-        ema26       = close.ewm(span=26, adjust=False).mean()
-        macd_line   = ema12 - ema26
-        signal_line = macd_line.ewm(span=9, adjust=False).mean()
-        macd_val    = round(float(macd_line.iloc[-1]), 3)
-        signal_val  = round(float(signal_line.iloc[-1]), 3)
-        macd_hist   = round(macd_val - signal_val, 3)
-        macd_hist_p = round(float((macd_line - signal_line).iloc[-2]), 3) if n > 1 else macd_hist
+        ema12_list   = _ema(close, 12)
+        ema26_list   = _ema(close, 26)
+        macd_list    = [a - b for a, b in zip(ema12_list, ema26_list)]
+        signal_list  = _ema(macd_list, 9)
+        hist_list    = [m - s for m, s in zip(macd_list, signal_list)]
+
+        macd_val    = round(macd_list[-1], 3)
+        signal_val  = round(signal_list[-1], 3)
+        macd_hist   = round(hist_list[-1], 3)
+        macd_hist_p = round(hist_list[-2], 3) if len(hist_list) > 1 else macd_hist
+
         macd_crossover  = (macd_hist > 0 and macd_hist_p <= 0)
         macd_crossunder = (macd_hist < 0 and macd_hist_p >= 0)
         macd_momentum   = 'artiyor' if macd_hist > macd_hist_p else 'azaliyor'
 
-        # ── EMA Trendler ────────────────────────────────────────────────────
-        ema20  = float(close.ewm(span=20, adjust=False).mean().iloc[-1])
-        ema50  = float(close.ewm(span=50, adjust=False).mean().iloc[-1]) if n >= 50 else ema20
-        ema200 = float(close.ewm(span=200, adjust=False).mean().iloc[-1]) if n >= 200 else ema50
-        cur    = float(close.iloc[-1])
+        # ── EMA20 / EMA50 / EMA200 ──────────────────────────────────────────
+        ema20  = _ema(close, 20)[-1]
+        ema50  = _ema(close, 50)[-1] if n >= 50 else ema20
+        ema200 = _ema(close, 200)[-1] if n >= 200 else ema50
 
         if cur > ema20 > ema50 > ema200:
             trend = 'guclu_yukari'
@@ -489,12 +498,14 @@ def get_technical_indicators(symbol: str, period: str = '1y') -> dict:
         trend_guc = round(abs((ema20 - ema50) / ema50) * 100, 2) if ema50 else 0
 
         # ── Bollinger Bands (20 gün, 2 std) ─────────────────────────────────
-        bb_mid    = close.rolling(20).mean()
-        bb_std    = close.rolling(20).std()
-        bb_upper  = round(float((bb_mid + 2 * bb_std).iloc[-1]), 2)
-        bb_lower  = round(float((bb_mid - 2 * bb_std).iloc[-1]), 2)
-        bb_mid_v  = round(float(bb_mid.iloc[-1]), 2)
-        bb_width  = round((bb_upper - bb_lower) / bb_mid_v * 100, 2) if bb_mid_v else 0
+        bb_mid_list = _sma(close, 20)
+        bb_mid_v    = bb_mid_list[-1]
+        recent_20   = close[-20:]
+        bb_std      = stdev(recent_20) if len(recent_20) > 1 else 0
+        bb_upper    = round(bb_mid_v + 2 * bb_std, 2)
+        bb_lower    = round(bb_mid_v - 2 * bb_std, 2)
+        bb_mid_v    = round(bb_mid_v, 2)
+        bb_width    = round((bb_upper - bb_lower) / bb_mid_v * 100, 2) if bb_mid_v else 0
 
         if cur >= bb_upper:
             bb_position = 'ust_band_ustunde'
@@ -504,77 +515,98 @@ def get_technical_indicators(symbol: str, period: str = '1y') -> dict:
             bb_pct = (cur - bb_lower) / (bb_upper - bb_lower) * 100 if (bb_upper - bb_lower) else 50
             bb_position = f'bant_ici_{round(bb_pct)}pct'
 
-        # ── Stochastic Oscillator (%K %D) ───────────────────────────────────
-        low14       = low.rolling(14).min()
-        high14      = high.rolling(14).max()
-        stoch_k_raw = 100 * (close - low14) / (high14 - low14 + 1e-10)
-        stoch_k     = round(float(stoch_k_raw.rolling(3).mean().iloc[-1]), 1)
-        stoch_d     = round(float(stoch_k_raw.rolling(3).mean().rolling(3).mean().iloc[-1]), 1)
-        stoch_k_p   = round(float(stoch_k_raw.rolling(3).mean().iloc[-2]), 1) if n > 1 else stoch_k
+        # ── Stochastic ──────────────────────────────────────────────────────
+        def stoch_k_raw_val(i):
+            l14 = min(low[max(0, i-13):i+1])
+            h14 = max(high[max(0, i-13):i+1])
+            return 100 * (close[i] - l14) / (h14 - l14 + 1e-10)
+
+        raw_k = [stoch_k_raw_val(i) for i in range(n)]
+        smoothed_k = _sma(raw_k, 3)
+        smoothed_k_valid = [v for v in smoothed_k if v is not None]
+        stoch_k = round(smoothed_k_valid[-1], 1) if smoothed_k_valid else 50.0
+        stoch_k_p = round(smoothed_k_valid[-2], 1) if len(smoothed_k_valid) > 1 else stoch_k
+
+        smoothed_d = _sma(smoothed_k_valid, 3)
+        smoothed_d_valid = [v for v in smoothed_d if v is not None]
+        stoch_d = round(smoothed_d_valid[-1], 1) if smoothed_d_valid else 50.0
 
         stoch_crossover  = (stoch_k > stoch_d and stoch_k_p <= stoch_d)
         stoch_crossunder = (stoch_k < stoch_d and stoch_k_p >= stoch_d)
         stoch_signal     = 'asiri_satim' if stoch_k < 20 else ('asiri_alim' if stoch_k > 80 else 'normal')
 
         # ── Williams %R ─────────────────────────────────────────────────────
-        high14w = high.rolling(14).max()
-        low14w  = low.rolling(14).min()
-        will_r  = round(float(-100 * (high14w.iloc[-1] - cur) / (high14w.iloc[-1] - low14w.iloc[-1] + 1e-10)), 1)
+        h14w = max(high[-14:])
+        l14w = min(low[-14:])
+        will_r = round(-100 * (h14w - cur) / (h14w - l14w + 1e-10), 1)
         will_signal = 'asiri_satim' if will_r < -80 else ('asiri_alim' if will_r > -20 else 'normal')
 
-        # ── ATR (Average True Range) ─────────────────────────────────────────
-        import pandas as pd
-        prev_close = close.shift(1)
-        tr = pd.concat([high - low, (high - prev_close).abs(), (low - prev_close).abs()], axis=1).max(axis=1)
-        atr     = round(float(tr.ewm(span=14, adjust=False).mean().iloc[-1]), 2)
+        # ── ATR (14 gün EWM) ────────────────────────────────────────────────
+        tr_list = []
+        for i in range(1, n):
+            hl = high[i] - low[i]
+            hc = abs(high[i] - close[i-1])
+            lc = abs(low[i] - close[i-1])
+            tr_list.append(max(hl, hc, lc))
+        atr_list = _ewm_com(tr_list, 13)
+        atr     = round(atr_list[-1], 2)
         atr_pct = round(atr / cur * 100, 2) if cur else 0
 
         # ── OBV ─────────────────────────────────────────────────────────────
-        obv_series = (volume * ((close > close.shift(1)).astype(int) - (close < close.shift(1)).astype(int))).cumsum()
-        obv_trend  = 'yukari' if float(obv_series.iloc[-1]) > float(obv_series.iloc[-5]) else 'asagi'
+        obv = 0
+        obv_list = [0]
+        for i in range(1, n):
+            if close[i] > close[i-1]:
+                obv += volume[i]
+            elif close[i] < close[i-1]:
+                obv -= volume[i]
+            obv_list.append(obv)
+        obv_trend = 'yukari' if obv_list[-1] > obv_list[-5] else 'asagi'
 
         # ── Hacim Analizi ────────────────────────────────────────────────────
-        vol_avg20  = float(volume.tail(20).mean())
-        vol_today  = float(volume.iloc[-1])
+        vol_avg20  = mean(volume[-20:]) if volume[-20:] else 1
+        vol_today  = volume[-1]
         vol_ratio  = round(vol_today / vol_avg20, 2) if vol_avg20 > 0 else 1
         vol_signal = 'cok_yuksek' if vol_ratio > 3 else (
             'yuksek' if vol_ratio > 1.5 else ('dusuk' if vol_ratio < 0.5 else 'normal'))
 
         # ── Destek / Direnç ──────────────────────────────────────────────────
-        recent_high_20 = round(float(high.tail(20).max()), 2)
-        recent_low_20  = round(float(low.tail(20).min()), 2)
-        recent_high_60 = round(float(high.tail(60).max()), 2)
-        recent_low_60  = round(float(low.tail(60).min()), 2)
+        recent_high_20 = round(max(high[-20:]), 2)
+        recent_low_20  = round(min(low[-20:]), 2)
+        recent_high_60 = round(max(high[-60:]), 2) if n >= 60 else recent_high_20
+        recent_low_60  = round(min(low[-60:]), 2) if n >= 60 else recent_low_20
 
-        p_high = float(high.iloc[-2])
-        p_low  = float(low.iloc[-2])
-        p_close = float(close.iloc[-2])
-        pivot  = round((p_high + p_low + p_close) / 3, 2)
-        r1     = round(2 * pivot - p_low, 2)
-        s1     = round(2 * pivot - p_high, 2)
-        r2     = round(pivot + (p_high - p_low), 2)
-        s2     = round(pivot - (p_high - p_low), 2)
+        p_high  = high[-2]
+        p_low   = low[-2]
+        p_close = close[-2]
+        pivot   = round((p_high + p_low + p_close) / 3, 2)
+        r1 = round(2 * pivot - p_low, 2)
+        s1 = round(2 * pivot - p_high, 2)
+        r2 = round(pivot + (p_high - p_low), 2)
+        s2 = round(pivot - (p_high - p_low), 2)
 
         # ── Mum Formasyonu ───────────────────────────────────────────────────
-        o1 = float(hist['Open'].iloc[-1])
-        c1 = float(close.iloc[-1])
-        h1 = float(high.iloc[-1])
-        l1 = float(low.iloc[-1])
+        o1 = opens[-1]
+        c1 = close[-1]
+        h1 = high[-1]
+        l1 = low[-1]
         body       = abs(c1 - o1)
         upper_wick = h1 - max(c1, o1)
         lower_wick = min(c1, o1) - l1
+        range_     = h1 - l1 + 1e-10
+
         candle_pattern = 'normal'
-        if body < (h1 - l1) * 0.1:
+        if body < range_ * 0.1:
             candle_pattern = 'doji'
         elif lower_wick > body * 2 and upper_wick < body * 0.5:
             candle_pattern = 'cekic' if c1 > o1 else 'asilan_adam'
         elif upper_wick > body * 2 and lower_wick < body * 0.5:
             candle_pattern = 'ters_cekic'
 
-        # ── Fiyat Momentumu ──────────────────────────────────────────────────
-        returns_5d  = round((cur / float(close.iloc[-6])  - 1) * 100, 2) if n > 6  else 0
-        returns_20d = round((cur / float(close.iloc[-21]) - 1) * 100, 2) if n > 21 else 0
-        returns_60d = round((cur / float(close.iloc[-61]) - 1) * 100, 2) if n > 61 else 0
+        # ── Momentum ─────────────────────────────────────────────────────────
+        returns_5d  = round((cur / close[-6]  - 1) * 100, 2) if n > 6  else 0
+        returns_20d = round((cur / close[-21] - 1) * 100, 2) if n > 21 else 0
+        returns_60d = round((cur / close[-61] - 1) * 100, 2) if n > 61 else 0
 
         # ── Özet ─────────────────────────────────────────────────────────────
         yorumlar = []

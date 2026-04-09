@@ -12,6 +12,7 @@ import sys
 import time
 from datetime import datetime
 import os
+import zoneinfo
 
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 MANAGE_PY  = os.path.join(BASE_DIR, "manage.py")
@@ -27,7 +28,7 @@ RISK  = "orta" # dusuk / orta / yuksek
 
 def piyasa_acik_mi() -> bool:
     """BIST piyasa saatleri: Pzt-Cuma, 10:00-18:30 TSİ"""
-    now = datetime.now()
+    now = datetime.now(zoneinfo.ZoneInfo("Europe/Istanbul"))
     if now.weekday() >= 5:
         return False
     saat = now.hour * 60 + now.minute

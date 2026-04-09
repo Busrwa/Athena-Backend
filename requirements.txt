@@ -8,7 +8,7 @@ requests==2.32.3
 groq==0.11.0
 gunicorn==22.0.0
 whitenoise==6.7.0
-pandas>=2.0.0
-numpy>=1.24.0
 dj-database-url>=2.0.0
 psycopg2-binary>=2.9.0
+# pandas ve numpy KALDIRILDI — services.py artık saf Python kullanıyor
+# Bu sayede Windows DLL "Uygulama Denetimi" sorunu çözülür

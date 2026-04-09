@@ -20,8 +20,8 @@ from monitor.models import BudgetPlan, BudgetPosition
 GROQ_MODEL = "llama-3.3-70b-versatile"
 
 RISK_PARAMS = {
-    'dusuk':  {'stop': 4,  'hedef': 8},
-    'orta':   {'stop': 7,  'hedef': 15},
+    'dusuk': {'stop': 4, 'hedef': 8},
+    'orta': {'stop': 7, 'hedef': 15},
     'yuksek': {'stop': 10, 'hedef': 25},
 }
 
@@ -41,8 +41,8 @@ def butce_olustur(request):
     Athena tüm BIST'i tarar → En iyi N hisseyi seçer → Groq ile analiz yapar
     → BudgetPlan + BudgetPosition(bekliyor) kaydeder → Kullanıcıya rapor verir
     """
-    toplam_butce     = float(request.data.get('toplam_butce', 0))
-    risk_profili     = request.data.get('risk_profili', 'orta')
+    toplam_butce = float(request.data.get('toplam_butce', 0))
+    risk_profili = request.data.get('risk_profili', 'orta')
     max_hisse_sayisi = int(request.data.get('max_hisse_sayisi', 3))
 
     if toplam_butce <= 0:
@@ -94,22 +94,22 @@ def butce_olustur(request):
                     continue
 
                 adaylar.append({
-                    'sembol':     sembol,
-                    'puan':       puan,
-                    'fiyat':      fiyat,
-                    'adet':       adet,
-                    'maliyet':    round(adet * fiyat, 2),
-                    'stop_f':     round(fiyat * (1 - rp['stop'] / 100), 4),
-                    'hedef_f':    round(fiyat * (1 + rp['hedef'] / 100), 4),
-                    'stop_pct':   rp['stop'],
-                    'hedef_pct':  rp['hedef'],
-                    'rsi':        tech.get('rsi'),
-                    'trend':      tech.get('trend'),
-                    'macd_hist':  tech.get('macd_histogram'),
-                    'bb_pos':     tech.get('bb_position', ''),
+                    'sembol': sembol,
+                    'puan': puan,
+                    'fiyat': fiyat,
+                    'adet': adet,
+                    'maliyet': round(adet * fiyat, 2),
+                    'stop_f': round(fiyat * (1 - rp['stop'] / 100), 4),
+                    'hedef_f': round(fiyat * (1 + rp['hedef'] / 100), 4),
+                    'stop_pct': rp['stop'],
+                    'hedef_pct': rp['hedef'],
+                    'rsi': tech.get('rsi'),
+                    'trend': tech.get('trend'),
+                    'macd_hist': tech.get('macd_histogram'),
+                    'bb_pos': tech.get('bb_position', ''),
                     'gerekceler': gerekceler,
-                    'sinyal':     _get_signal_label(puan),
-                    'degisim':    stock.get('change_percent', 0),
+                    'sinyal': _get_signal_label(puan),
+                    'degisim': stock.get('change_percent', 0),
                 })
         except Exception as e:
             hatalar.append(f"{sembol}: {str(e)[:60]}")
@@ -197,36 +197,36 @@ Türkçe yaz. Net, sade, anlaşılır ol. Jargon kullanma, borsa bilgisi olmayan
             athena_not=' | '.join(a['gerekceler'][:3]),
         )
         pozisyonlar_data.append({
-            'id':           pos.id,
-            'sembol':       a['sembol'],
-            'adet':         a['adet'],
-            'giris_fiyat':  a['fiyat'],
-            'maliyet_tl':   a['maliyet'],
-            'stop_fiyat':   a['stop_f'],
-            'hedef_fiyat':  a['hedef_f'],
-            'stop_pct':     a['stop_pct'],
-            'hedef_pct':    a['hedef_pct'],
-            'skor':         a['puan'],
-            'sinyal':       a['sinyal'],
-            'rsi':          a['rsi'],
-            'trend':        a['trend'],
-            'gerekceler':   a['gerekceler'][:5],
-            'durum':        'bekliyor',
+            'id': pos.id,
+            'sembol': a['sembol'],
+            'adet': a['adet'],
+            'giris_fiyat': a['fiyat'],
+            'maliyet_tl': a['maliyet'],
+            'stop_fiyat': a['stop_f'],
+            'hedef_fiyat': a['hedef_f'],
+            'stop_pct': a['stop_pct'],
+            'hedef_pct': a['hedef_pct'],
+            'skor': a['puan'],
+            'sinyal': a['sinyal'],
+            'rsi': a['rsi'],
+            'trend': a['trend'],
+            'gerekceler': a['gerekceler'][:5],
+            'durum': 'bekliyor',
         })
 
     toplam_maliyet = sum(p['maliyet_tl'] for p in pozisyonlar_data)
 
     return Response({
-        'plan_id':           plan.id,
-        'toplam_butce':      toplam_butce,
-        'kullanilan_butce':  round(toplam_maliyet, 2),
-        'kalan_nakit':       round(toplam_butce - toplam_maliyet, 2),
-        'risk_profili':      risk_profili,
-        'taranan_hisse':     len(taranacak),
-        'bulunan_aday':      len(adaylar),
-        'secilen_hisse':     len(secilen),
-        'pozisyonlar':       pozisyonlar_data,
-        'athena_analiz':     athena_analiz,
+        'plan_id': plan.id,
+        'toplam_butce': toplam_butce,
+        'kullanilan_butce': round(toplam_maliyet, 2),
+        'kalan_nakit': round(toplam_butce - toplam_maliyet, 2),
+        'risk_profili': risk_profili,
+        'taranan_hisse': len(taranacak),
+        'bulunan_aday': len(adaylar),
+        'secilen_hisse': len(secilen),
+        'pozisyonlar': pozisyonlar_data,
+        'athena_analiz': athena_analiz,
         'mesaj': (
             f"Athena {len(taranacak)} hisse taradı, {len(adaylar)} aday buldu, "
             f"en iyi {len(secilen)} tanesini seçti. "
@@ -260,20 +260,20 @@ def pozisyon_alindi(request, pozisyon_id):
         pos.giris_fiyat = gercek_fiyat
         # Stop ve hedefi güncelle
         rp = RISK_PARAMS.get(pos.plan.risk_profili, RISK_PARAMS['orta'])
-        pos.stop_fiyat  = round(gercek_fiyat * (1 - rp['stop']  / 100), 4)
+        pos.stop_fiyat = round(gercek_fiyat * (1 - rp['stop'] / 100), 4)
         pos.hedef_fiyat = round(gercek_fiyat * (1 + rp['hedef'] / 100), 4)
 
     pos.durum = 'acik'
     pos.save()
 
     return Response({
-        'status':      'Pozisyon açık olarak işaretlendi',
-        'sembol':      pos.sembol,
-        'adet':        float(pos.adet),
+        'status': 'Pozisyon açık olarak işaretlendi',
+        'sembol': pos.sembol,
+        'adet': float(pos.adet),
         'giris_fiyat': float(pos.giris_fiyat),
-        'stop_fiyat':  float(pos.stop_fiyat),
+        'stop_fiyat': float(pos.stop_fiyat),
         'hedef_fiyat': float(pos.hedef_fiyat),
-        'maliyet_tl':  pos.maliyet_tl,
+        'maliyet_tl': pos.maliyet_tl,
         'mesaj': (
             f"{pos.sembol} portföyüne eklendi. "
             f"Stop: {float(pos.stop_fiyat)} TL | Hedef: {float(pos.hedef_fiyat)} TL. "
@@ -300,7 +300,7 @@ def butce_durum(request):
     sonuclar = []
     uyarilar = []
     toplam_maliyet = 0
-    toplam_guncel  = 0
+    toplam_guncel = 0
 
     for pos in pozisyonlar:
         stock = get_stock_data(pos.sembol)
@@ -312,12 +312,12 @@ def butce_durum(request):
 
         maliyet = float(pos.adet) * float(pos.giris_fiyat)
         guncel_deger = float(pos.adet) * guncel_fiyat
-        kaz_kayip_tl  = guncel_deger - maliyet
+        kaz_kayip_tl = guncel_deger - maliyet
         kaz_kayip_pct = (kaz_kayip_tl / maliyet * 100) if maliyet > 0 else 0
 
         if pos.durum == 'acik':
             toplam_maliyet += maliyet
-            toplam_guncel  += guncel_deger
+            toplam_guncel += guncel_deger
 
         # Sinyal hesapla
         tech = get_technical_indicators(pos.sembol)
@@ -327,6 +327,7 @@ def butce_durum(request):
         # Otomatik stop/hedef kontrolü
         acil_uyari = None
         tavsiye = 'TUT'
+        rp = RISK_PARAMS.get(pos.plan.risk_profili, RISK_PARAMS['orta'])
 
         if pos.durum == 'acik':
             if guncel_fiyat <= float(pos.stop_fiyat):
@@ -343,49 +344,49 @@ def butce_durum(request):
                 uyarilar.append(acil_uyari)
             elif puan >= 3:
                 tavsiye = 'TUT_AL'  # güçlü, tutmaya devam
-            elif kaz_kayip_pct <= -float(pos.stop_fiyat) * 0.8:
+            elif kaz_kayip_pct <= -(rp['stop'] * 0.8):
                 tavsiye = 'DİKKAT'
 
         sonuclar.append({
-            'id':            pos.id,
-            'sembol':        pos.sembol,
-            'durum':         pos.durum,
-            'adet':          float(pos.adet),
-            'giris_fiyat':   float(pos.giris_fiyat),
-            'guncel_fiyat':  guncel_fiyat,
-            'stop_fiyat':    float(pos.stop_fiyat),
-            'hedef_fiyat':   float(pos.hedef_fiyat),
-            'maliyet_tl':    round(maliyet, 2),
-            'guncel_deger':  round(guncel_deger, 2),
-            'kaz_kayip_tl':  round(kaz_kayip_tl, 2),
+            'id': pos.id,
+            'sembol': pos.sembol,
+            'durum': pos.durum,
+            'adet': float(pos.adet),
+            'giris_fiyat': float(pos.giris_fiyat),
+            'guncel_fiyat': guncel_fiyat,
+            'stop_fiyat': float(pos.stop_fiyat),
+            'hedef_fiyat': float(pos.hedef_fiyat),
+            'maliyet_tl': round(maliyet, 2),
+            'guncel_deger': round(guncel_deger, 2),
+            'kaz_kayip_tl': round(kaz_kayip_tl, 2),
             'kaz_kayip_pct': round(kaz_kayip_pct, 2),
             'degisim_bugun': degisim_bugun,
-            'rsi':           tech.get('rsi'),
-            'trend':         tech.get('trend'),
-            'tavsiye':       tavsiye,
+            'rsi': tech.get('rsi'),
+            'trend': tech.get('trend'),
+            'tavsiye': tavsiye,
             'athena_sinyal': sinyal_label,
-            'sinyal_skoru':  puan,
-            'gerekceler':    gerekceler[:3],
-            'acil_uyari':    acil_uyari,
+            'sinyal_skoru': puan,
+            'gerekceler': gerekceler[:3],
+            'acil_uyari': acil_uyari,
         })
 
-    toplam_kaz_kayip    = toplam_guncel - toplam_maliyet
+    toplam_kaz_kayip = toplam_guncel - toplam_maliyet
     toplam_kaz_kayip_pct = (toplam_kaz_kayip / toplam_maliyet * 100) if toplam_maliyet > 0 else 0
 
     return Response({
-        'plan_id':           plan.id,
-        'toplam_butce':      float(plan.toplam_butce),
-        'risk_profili':      plan.risk_profili,
-        'toplam_maliyet':    round(toplam_maliyet, 2),
-        'toplam_guncel':     round(toplam_guncel, 2),
-        'toplam_kaz_kayip':  round(toplam_kaz_kayip, 2),
+        'plan_id': plan.id,
+        'toplam_butce': float(plan.toplam_butce),
+        'risk_profili': plan.risk_profili,
+        'toplam_maliyet': round(toplam_maliyet, 2),
+        'toplam_guncel': round(toplam_guncel, 2),
+        'toplam_kaz_kayip': round(toplam_kaz_kayip, 2),
         'toplam_kaz_kayip_pct': round(toplam_kaz_kayip_pct, 2),
         'acik_pozisyon_sayisi': len([p for p in sonuclar if p['durum'] == 'acik']),
-        'bekleyen_sayisi':   len([p for p in sonuclar if p['durum'] == 'bekliyor']),
-        'acil_uyarilar':     uyarilar,
-        'pozisyonlar':       sonuclar,
-        'son_tarama':        plan.son_tarama,
-        'athena_analiz':     plan.athena_analiz,
+        'bekleyen_sayisi': len([p for p in sonuclar if p['durum'] == 'bekliyor']),
+        'acil_uyarilar': uyarilar,
+        'pozisyonlar': sonuclar,
+        'son_tarama': plan.son_tarama,
+        'athena_analiz': plan.athena_analiz,
     })
 
 
@@ -412,33 +413,33 @@ def pozisyon_kapat(request, pozisyon_id):
         stock = get_stock_data(pos.sembol)
         cikis_fiyat = stock['price'] if stock else float(pos.giris_fiyat)
 
-    maliyet  = float(pos.adet) * float(pos.giris_fiyat)
-    gelir    = float(pos.adet) * cikis_fiyat
-    kaz_kayip_tl  = gelir - maliyet
+    maliyet = float(pos.adet) * float(pos.giris_fiyat)
+    gelir = float(pos.adet) * cikis_fiyat
+    kaz_kayip_tl = gelir - maliyet
     kaz_kayip_pct = (kaz_kayip_tl / maliyet * 100) if maliyet > 0 else 0
 
     durum_map = {'hedef': 'hedef', 'stop': 'stop', 'manuel': 'kapali'}
-    pos.durum         = durum_map.get(neden, 'kapali')
-    pos.cikis_fiyat   = cikis_fiyat
+    pos.durum = durum_map.get(neden, 'kapali')
+    pos.cikis_fiyat = cikis_fiyat
     pos.kapanis_tarihi = timezone.now()
-    pos.kaz_kayip_tl  = round(kaz_kayip_tl, 2)
+    pos.kaz_kayip_tl = round(kaz_kayip_tl, 2)
     pos.kaz_kayip_pct = round(kaz_kayip_pct, 2)
     pos.save()
 
     emoji = '✅' if kaz_kayip_tl >= 0 else '❌'
 
     return Response({
-        'status':        'Pozisyon kapatıldı',
-        'sembol':        pos.sembol,
-        'giris_fiyat':   float(pos.giris_fiyat),
-        'cikis_fiyat':   cikis_fiyat,
-        'adet':          float(pos.adet),
-        'maliyet_tl':    round(maliyet, 2),
-        'gelir_tl':      round(gelir, 2),
-        'kaz_kayip_tl':  round(kaz_kayip_tl, 2),
+        'status': 'Pozisyon kapatıldı',
+        'sembol': pos.sembol,
+        'giris_fiyat': float(pos.giris_fiyat),
+        'cikis_fiyat': cikis_fiyat,
+        'adet': float(pos.adet),
+        'maliyet_tl': round(maliyet, 2),
+        'gelir_tl': round(gelir, 2),
+        'kaz_kayip_tl': round(kaz_kayip_tl, 2),
         'kaz_kayip_pct': round(kaz_kayip_pct, 2),
-        'durum':         pos.durum,
-        'mesaj':         f"{emoji} {pos.sembol} kapatıldı: {kaz_kayip_tl:+.2f} TL ({kaz_kayip_pct:+.2f}%)",
+        'durum': pos.durum,
+        'mesaj': f"{emoji} {pos.sembol} kapatıldı: {kaz_kayip_tl:+.2f} TL ({kaz_kayip_pct:+.2f}%)",
     })
 
 
@@ -452,7 +453,7 @@ def yeni_firsat_tara(request):
 
     Mevcut portföyde olmayan hisseleri tara, yeni fırsat bul.
     """
-    kalan_butce  = float(request.data.get('kalan_butce', 0))
+    kalan_butce = float(request.data.get('kalan_butce', 0))
     risk_profili = request.data.get('risk_profili', 'orta')
 
     if kalan_butce <= 0:
@@ -491,15 +492,15 @@ def yeni_firsat_tara(request):
                 if adet < 1:
                     continue
                 adaylar.append({
-                    'sembol':    sembol,
-                    'puan':      puan,
-                    'fiyat':     fiyat,
-                    'adet':      adet,
-                    'maliyet':   round(adet * fiyat, 2),
-                    'stop_f':    round(fiyat * (1 - rp['stop'] / 100), 4),
-                    'hedef_f':   round(fiyat * (1 + rp['hedef'] / 100), 4),
-                    'rsi':       tech.get('rsi'),
-                    'trend':     tech.get('trend'),
+                    'sembol': sembol,
+                    'puan': puan,
+                    'fiyat': fiyat,
+                    'adet': adet,
+                    'maliyet': round(adet * fiyat, 2),
+                    'stop_f': round(fiyat * (1 - rp['stop'] / 100), 4),
+                    'hedef_f': round(fiyat * (1 + rp['hedef'] / 100), 4),
+                    'rsi': tech.get('rsi'),
+                    'trend': tech.get('trend'),
                     'gerekceler': gerekceler[:3],
                 })
         except Exception:
@@ -510,8 +511,8 @@ def yeni_firsat_tara(request):
 
     return Response({
         'kalan_butce': kalan_butce,
-        'bulunan':     len(adaylar),
-        'oneriler':    en_iyi,
+        'bulunan': len(adaylar),
+        'oneriler': en_iyi,
         'mesaj': (
             f"{len(adaylar)} yeni fırsat bulundu, en iyi 3 tanesi listelendi."
             if en_iyi else
@@ -535,25 +536,25 @@ def butce_gecmis(request):
         kaz = float(pos.kaz_kayip_tl or 0)
         toplam_kaz += kaz
         data.append({
-            'sembol':        pos.sembol,
-            'giris_fiyat':   float(pos.giris_fiyat),
-            'cikis_fiyat':   float(pos.cikis_fiyat or 0),
-            'adet':          float(pos.adet),
-            'kaz_kayip_tl':  kaz,
+            'sembol': pos.sembol,
+            'giris_fiyat': float(pos.giris_fiyat),
+            'cikis_fiyat': float(pos.cikis_fiyat or 0),
+            'adet': float(pos.adet),
+            'kaz_kayip_tl': kaz,
             'kaz_kayip_pct': float(pos.kaz_kayip_pct or 0),
-            'durum':         pos.durum,
-            'acilis':        pos.acilis_tarihi,
-            'kapanis':       pos.kapanis_tarihi,
+            'durum': pos.durum,
+            'acilis': pos.acilis_tarihi,
+            'kapanis': pos.kapanis_tarihi,
         })
 
     kazanan = [d for d in data if d['kaz_kayip_tl'] > 0]
     kaybeden = [d for d in data if d['kaz_kayip_tl'] <= 0]
 
     return Response({
-        'toplam_islem':  len(data),
-        'kazanan':       len(kazanan),
-        'kaybeden':      len(kaybeden),
-        'basari_orani':  round(len(kazanan) / len(data) * 100, 1) if data else 0,
+        'toplam_islem': len(data),
+        'kazanan': len(kazanan),
+        'kaybeden': len(kaybeden),
+        'basari_orani': round(len(kazanan) / len(data) * 100, 1) if data else 0,
         'toplam_kaz_kayip_tl': round(toplam_kaz, 2),
-        'pozisyonlar':   data,
+        'pozisyonlar': data,
     })
