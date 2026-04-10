@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: athena-backend
+    runtime: python
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    startCommand: gunicorn core.wsgi --log-file - --timeout 120 --workers 1 --threads 2 --worker-class gthread
+    healthCheckPath: /health/
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
