@@ -3,11 +3,6 @@ Athena Bütçe Yönetimi
 ======================
 Kullanıcı bütçesini girer → Athena tüm piyasayı tarar → En iyi hisseleri seçer
 → Kullanıcı "aldım" der → Athena fiyat takibi yapar → SAT sinyali verir
-
-v3 Değişiklikleri:
-  - butce_olustur: döngüden ÖNCE prefetch_bulk_history + get_fundamental_data_bulk
-  - 80 hisse için 160+ ayrı istek → 1 toplu istek + sıralı fundamental
-  - yeni_firsat_tara: aynı optimizasyon
 """
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -17,7 +12,6 @@ from groq import Groq
 
 from stocks.services import (
     get_stock_data, get_technical_indicators, get_fundamental_data,
-    get_fundamental_data_bulk, prefetch_bulk_history,
     ALL_BIST_STOCKS,
 )
 from monitor.scanner import compute_score, _get_signal_label
@@ -42,19 +36,28 @@ def _groq_client():
 def butce_olustur(request):
     """
     POST /api/monitor/butce/olustur/
-    Body: { "toplam_butce": 1000, "risk_profili": "orta", "max_hisse_sayisi": 3 }
+    Body: { "toplam_butce": 1000, "risk_profili": "orta" }
 
     Athena tüm BIST'i tarar → En iyi N hisseyi seçer → Groq ile analiz yapar
     → BudgetPlan + BudgetPosition(bekliyor) kaydeder → Kullanıcıya rapor verir
     """
     toplam_butce = float(request.data.get('toplam_butce', 0))
     risk_profili = request.data.get('risk_profili', 'orta')
-    max_hisse_sayisi = int(request.data.get('max_hisse_sayisi', 3))
 
     if toplam_butce <= 0:
         return Response({'error': 'toplam_butce sıfırdan büyük olmalı'}, status=400)
     if risk_profili not in RISK_PARAMS:
         return Response({'error': 'risk_profili: dusuk | orta | yuksek'}, status=400)
+
+    # Bütçeye göre otomatik hisse sayısı — kullanıcı belirlemez
+    if toplam_butce < 1000:
+        max_hisse_sayisi = 1
+    elif toplam_butce < 3000:
+        max_hisse_sayisi = 2
+    elif toplam_butce < 10000:
+        max_hisse_sayisi = 3
+    else:
+        max_hisse_sayisi = 5
 
     # Var olan aktif planı devre dışı bırak
     BudgetPlan.objects.filter(is_active=True).update(is_active=False)
@@ -62,22 +65,11 @@ def butce_olustur(request):
     rp = RISK_PARAMS[risk_profili]
     butce_per_hisse = toplam_butce / max_hisse_sayisi
 
-    taranacak = ALL_BIST_STOCKS[:80]
-
-    # ── TOPLU VERİ ÖN YÜKLEMESİ (rate limit çözümü) ──────────────────────────
-    # 1. Tarihsel fiyat verisi: 80 hisse = TEK yf.download() isteği
-    print(f"[TARAMA] {len(taranacak)} hisse için toplu veri çekimi başlıyor...")
-    prefetch_bulk_history(taranacak, period='1y')
-
-    # 2. Fundamental veriler: sıralı + 0.4s delay → rate limit yok
-    #    Cache'te olanlar için bekleme yapılmaz (1 saat geçerli)
-    print(f"[TARAMA] Fundamental veriler çekiliyor (sıralı, rate-limit güvenli)...")
-    fund_bulk = get_fundamental_data_bulk(taranacak, delay=0.4)
-    # ─────────────────────────────────────────────────────────────────────────
-
     # ── Piyasa Taraması ───────────────────────────────────────────────────────
     adaylar = []
     hatalar = []
+
+    taranacak = ALL_BIST_STOCKS[:80]  # En likit 80 hisse (hız için)
 
     for sembol in taranacak:
         try:
@@ -89,20 +81,23 @@ def butce_olustur(request):
             if fiyat <= 0:
                 continue
 
+            # Bütçe yeterliliği: en az 1 lot alabilmeli
             if butce_per_hisse < fiyat:
                 continue
 
-            # get_technical_indicators artık bulk cache'ten okur — yeni istek YOK
             tech = get_technical_indicators(sembol)
             if not tech.get('rsi'):
                 continue
 
-            # fund_bulk'tan al — yeni istek YOK
-            fund = fund_bulk.get(sembol)
+            fund = None
+            try:
+                fund = get_fundamental_data(sembol)
+            except Exception:
+                pass
 
             puan, gerekceler = compute_score(tech, stock, fund)
 
-            if puan >= 4:
+            if puan >= 4:  # Sadece gerçekten güçlü sinyaller
                 adet = int(butce_per_hisse / fiyat)
                 if adet < 1:
                     continue
@@ -138,6 +133,7 @@ def butce_olustur(request):
             'taranan': len(taranacak),
         }, status=200)
 
+    # En iyi N hisseyi seç
     adaylar.sort(key=lambda x: x['puan'], reverse=True)
     secilen = adaylar[:max_hisse_sayisi]
 
@@ -254,7 +250,10 @@ Türkçe yaz. Net, sade, anlaşılır ol. Jargon kullanma, borsa bilgisi olmayan
 def pozisyon_alindi(request, pozisyon_id):
     """
     POST /api/monitor/butce/pozisyon/<id>/alindi/
-    Body: { "gercek_fiyat": 45.20 }  (opsiyonel)
+    Body: { "gercek_fiyat": 45.20 }  (opsiyonel — gerçek alış fiyatı)
+
+    Kullanıcı hisseyi aldığında bu endpoint çağrılır.
+    Pozisyon durumu 'bekliyor' → 'acik' olur.
     """
     try:
         pos = BudgetPosition.objects.get(id=pozisyon_id)
@@ -268,6 +267,7 @@ def pozisyon_alindi(request, pozisyon_id):
     if gercek_fiyat:
         gercek_fiyat = float(gercek_fiyat)
         pos.giris_fiyat = gercek_fiyat
+        # Stop ve hedefi güncelle
         rp = RISK_PARAMS.get(pos.plan.risk_profili, RISK_PARAMS['orta'])
         pos.stop_fiyat = round(gercek_fiyat * (1 - rp['stop'] / 100), 4)
         pos.hedef_fiyat = round(gercek_fiyat * (1 + rp['hedef'] / 100), 4)
@@ -327,11 +327,17 @@ def butce_durum(request):
         if pos.durum == 'acik':
             toplam_maliyet += maliyet
             toplam_guncel += guncel_deger
+        elif pos.durum == 'bekliyor':
+            # Bekliyor pozisyonlar da maliyet toplamına dahil edilsin
+            toplam_maliyet += maliyet
+            toplam_guncel += guncel_deger
 
+        # Sinyal hesapla
         tech = get_technical_indicators(pos.sembol)
         puan, gerekceler = compute_score(tech, stock)
         sinyal_label = _get_signal_label(puan)
 
+        # Otomatik stop/hedef kontrolü
         acil_uyari = None
         tavsiye = 'TUT'
         rp = RISK_PARAMS.get(pos.plan.risk_profili, RISK_PARAMS['orta'])
@@ -350,7 +356,7 @@ def butce_durum(request):
                 tavsiye = 'SAT'
                 uyarilar.append(acil_uyari)
             elif puan >= 3:
-                tavsiye = 'TUT_AL'
+                tavsiye = 'TUT_AL'  # güçlü, tutmaya devam
             elif kaz_kayip_pct <= -(rp['stop'] * 0.8):
                 tavsiye = 'DİKKAT'
 
@@ -404,6 +410,8 @@ def pozisyon_kapat(request, pozisyon_id):
     """
     POST /api/monitor/butce/pozisyon/<id>/kapat/
     Body: { "cikis_fiyat": 50.50, "neden": "hedef" | "stop" | "manuel" }
+
+    Pozisyonu kapatır, kar/zarar kaydeder.
     """
     try:
         pos = BudgetPosition.objects.get(id=pozisyon_id)
@@ -414,6 +422,7 @@ def pozisyon_kapat(request, pozisyon_id):
     neden = request.data.get('neden', 'manuel')
 
     if cikis_fiyat <= 0:
+        # Anlık fiyatı al
         stock = get_stock_data(pos.sembol)
         cikis_fiyat = stock['price'] if stock else float(pos.giris_fiyat)
 
@@ -454,6 +463,8 @@ def yeni_firsat_tara(request):
     """
     POST /api/monitor/butce/yeni-firsat/
     Body: { "kalan_butce": 300, "risk_profili": "orta" }
+
+    Mevcut portföyde olmayan hisseleri tara, yeni fırsat bul.
     """
     kalan_butce = float(request.data.get('kalan_butce', 0))
     risk_profili = request.data.get('risk_profili', 'orta')
@@ -461,6 +472,7 @@ def yeni_firsat_tara(request):
     if kalan_butce <= 0:
         return Response({'error': 'kalan_butce sıfırdan büyük olmalı'}, status=400)
 
+    # Zaten portföyde olanları hariç tut
     mevcut_semboller = set(
         BudgetPosition.objects.filter(
             plan__is_active=True,
@@ -468,15 +480,12 @@ def yeni_firsat_tara(request):
         ).values_list('sembol', flat=True)
     )
 
-    taranacak = [s for s in ALL_BIST_STOCKS[:80] if s not in mevcut_semboller]
     rp = RISK_PARAMS.get(risk_profili, RISK_PARAMS['orta'])
-
-    # Toplu ön yükleme
-    prefetch_bulk_history(taranacak, period='1y')
-
     adaylar = []
 
-    for sembol in taranacak:
+    for sembol in ALL_BIST_STOCKS[:80]:
+        if sembol in mevcut_semboller:
+            continue
         try:
             stock = get_stock_data(sembol)
             if not stock or stock.get('price', 0) <= 0:

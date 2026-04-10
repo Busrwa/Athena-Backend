@@ -1,16 +1,10 @@
 """
-Athena — Piyasa Veri Servisi v3
+Athena — Piyasa Veri Servisi v2
 pandas KULLANILMAZ → Windows DLL sorununu çözer
 Saf Python ile: RSI, MACD, Bollinger, Stochastic, ATR, Williams %R, OBV, VWAP
-
-v3 Değişiklikleri:
-  - prefetch_bulk_history(): 80 hisse = 1 yf.download() isteği
-  - get_fundamental_data_bulk(): sıralı + delay ile rate limit güvenli
-  - Mevcut tüm API aynı, geriye dönük uyumlu
 """
 import yfinance as yf
 import time
-import threading
 from datetime import datetime
 from statistics import mean, stdev
 
@@ -22,30 +16,31 @@ POPULAR_BIST_STOCKS = [
     'MOGAN', 'FROTO', 'TOASO', 'PGSUS', 'TAVHL',
     'YKBNK', 'HEKTS', 'PETKM', 'SAHOL', 'VESTL',
     'TKFEN', 'MGROS', 'ARCLK', 'DOHOL',
-    'ENKAI', 'EKGYO', 'KOZAL', 'KONTR', 'TCELL',
+    'ENKAI', 'EKGYO', 'KONTR', 'TCELL',
     'ISCTR', 'VAKBN', 'HALKB', 'TTKOM', 'LOGO',
     'NTHOL', 'ODAS', 'EUPWR', 'MAVI', 'BRSAN',
 ]
 
+# KOZAL, KOZAA, ANACM, KRSAN — Yahoo Finance'de delisted, kaldırıldı
 ALL_BIST_STOCKS = [
     # BIST30
     'THYAO', 'GARAN', 'AKBNK', 'EREGL', 'BIMAS',
     'ASELS', 'KRDMD', 'TUPRS', 'SISE', 'KCHOL',
     'FROTO', 'TOASO', 'PGSUS', 'TAVHL', 'YKBNK',
     'SAHOL', 'ARCLK', 'ENKAI', 'EKGYO', 'TCELL',
-    'ISCTR', 'VAKBN', 'HALKB', 'TTKOM', 'KOZAL',
+    'ISCTR', 'VAKBN', 'HALKB', 'TTKOM',
     'KONTR', 'PETKM', 'MGROS', 'DOHOL', 'AKSEN',
     # BIST100+
     'HEKTS', 'VESTL', 'TKFEN', 'LOGO', 'NTHOL',
     'ODAS',  'EUPWR', 'MAVI',  'BRSAN', 'MOGAN',
-    'AEFES', 'ALARK', 'ANACM', 'BERA',  'BTCIM',
+    'AEFES', 'ALARK', 'BERA',  'BTCIM',
     'CIMSA', 'CLEBI', 'CWENE', 'DOAS',  'EGEEN',
     'ENJSA', 'FENER', 'FLAP',  'GESAN',
     'GSDHO', 'GUBRF', 'INDES', 'ISGYO', 'ISMEN',
     'IZENR', 'JANTS', 'KAREL', 'KARTN', 'KATMR',
     'KAYSE', 'KCAER', 'KENT',  'KLRHO', 'KMPUR',
-    'KNFRT', 'KONYA', 'KOZAA', 'KRDMB', 'KRONT',
-    'KRPLS', 'KRSAN', 'KRVGD', 'KTSKR', 'KUTPO',
+    'KNFRT', 'KONYA', 'KRDMB', 'KRONT',
+    'KRPLS', 'KRVGD', 'KTSKR', 'KUTPO',
     'LMKDC', 'LUKSK', 'LYDHO', 'MACKO', 'MAKIM',
     'MAKTK', 'MANAS', 'MEGMT', 'MEPET', 'MERCN',
     'MERIT', 'MERKO', 'METRO', 'MIATK', 'MIPAZ',
@@ -125,13 +120,9 @@ ALL_SCAN_SYMBOLS = {
 _price_cache: dict = {}
 _tech_cache:  dict = {}
 _fund_cache:  dict = {}
-_bulk_hist_cache: dict = {}   # YENİ: toplu history cache
 _PRICE_TTL = 180
 _TECH_TTL  = 600
 _FUND_TTL  = 3600
-_BULK_TTL  = 600              # 10 dk — toplu tarihsel veri
-
-_bulk_lock = threading.Lock()
 
 
 def _cache_get(store, key, ttl):
@@ -145,9 +136,10 @@ def _cache_set(store, key, data):
     store[key] = {'data': data, 'ts': time.time()}
 
 
-# ─── Saf Python EMA ──────────────────────────────────────────────────────────
+# ─── Saf Python EMA ─────────────────────────────────────────────────────────
 
 def _ema(values: list, span: int) -> list:
+    """Exponential moving average — pandas olmadan"""
     if not values:
         return []
     k = 2.0 / (span + 1)
@@ -165,93 +157,12 @@ def _sma(values: list, period: int) -> list:
 
 
 def _ewm_com(values: list, com: int) -> list:
+    """EMA with com parameter: alpha = 1/(1+com)"""
     k = 1.0 / (1 + com)
     result = [values[0]]
     for v in values[1:]:
         result.append(v * k + result[-1] * (1 - k))
     return result
-
-
-# ─── YENİ: Toplu Tarihsel Veri Çekimi ────────────────────────────────────────
-
-def prefetch_bulk_history(symbols: list, period: str = '1y') -> None:
-    """
-    80 hissenin 1 yıllık tarihini TEK BİR yf.download() isteğiyle çeker.
-    budget_views.butce_olustur() döngüsünden önce çağrılmalı.
-
-    Çekilen veri _bulk_hist_cache'e yazılır.
-    get_technical_indicators() bu cache'i kullanır, yeniden istek atmaz.
-    """
-    yf_symbols = [f"{s}.IS" for s in symbols]
-
-    # Cache'te taze olanları çıkar
-    with _bulk_lock:
-        stale = [
-            s for s in yf_symbols
-            if not (_bulk_hist_cache.get(s) and
-                    (time.time() - _bulk_hist_cache[s]['ts']) < _BULK_TTL)
-        ]
-
-    if not stale:
-        return  # hepsi cache'te
-
-    try:
-        print(f"[BULK] {len(stale)} hisse için tarih çekiliyor (tek istek)...")
-        # yf.download tek seferde tüm hisseleri çeker — çok daha az rate limit
-        raw = yf.download(
-            tickers=stale,
-            period=period,
-            interval='1d',
-            group_by='ticker',
-            auto_adjust=True,
-            progress=False,
-            threads=True,
-        )
-
-        now = time.time()
-        with _bulk_lock:
-            for yf_sym in stale:
-                try:
-                    if len(stale) == 1:
-                        df = raw
-                    else:
-                        df = raw[yf_sym]
-
-                    if df is None or df.empty or len(df) < 50:
-                        continue
-
-                    _bulk_hist_cache[yf_sym] = {
-                        'data': df,
-                        'ts': now,
-                    }
-                except Exception as e:
-                    print(f"[BULK] {yf_sym} parse hatası: {e}")
-
-        print(f"[BULK] Tamamlandı: {len(_bulk_hist_cache)} hisse cache'lendi.")
-
-    except Exception as e:
-        print(f"[BULK] Toplu çekim hatası: {e}")
-
-
-def _get_hist_from_cache(symbol: str, period: str = '1y'):
-    """
-    Cache'te varsa oradan döndür, yoksa tek hisse çek.
-    get_technical_indicators() bunu kullanır.
-    """
-    yf_sym = f"{symbol}.IS"
-
-    with _bulk_lock:
-        entry = _bulk_hist_cache.get(yf_sym)
-        if entry and (time.time() - entry['ts']) < _BULK_TTL:
-            return entry['data']
-
-    # Cache miss → tek çekim (prefetch yapılmadıysa fallback)
-    ticker = yf.Ticker(yf_sym)
-    hist = ticker.history(period=period)
-    if not hist.empty and len(hist) >= 50:
-        with _bulk_lock:
-            _bulk_hist_cache[yf_sym] = {'data': hist, 'ts': time.time()}
-    return hist
 
 
 # ─── Hisse Verisi ─────────────────────────────────────────────────────────────
@@ -500,54 +411,30 @@ def get_fundamental_data(symbol: str) -> dict:
         return {'symbol': symbol, 'fundamental_score': 0, 'fundamental_notes': [], 'error': str(e)}
 
 
-def get_fundamental_data_bulk(symbols: list, delay: float = 0.4) -> dict:
-    """
-    YENİ: Birden fazla hisse için fundamental veri — cache önce, sonra sıralı çekim.
-    Tarama döngüsünden önce çağrılır, cache'i doldurur.
-    delay=0.4 → her istek arasında 400ms bekleme (rate limit güvenli).
-    """
-    result = {}
-    for symbol in symbols:
-        # Cache'te varsa direkt al, bekleme yok
-        cached = _cache_get(_fund_cache, symbol, _FUND_TTL)
-        if cached:
-            result[symbol] = cached
-            continue
-
-        # Cache'te yok → çek ve bekle
-        data = get_fundamental_data(symbol)
-        result[symbol] = data
-        time.sleep(delay)
-
-    return result
-
-
 # ─── Teknik Analiz — saf Python ───────────────────────────────────────────────
 
 def get_technical_indicators(symbol: str, period: str = '1y') -> dict:
     """
     Kapsamlı teknik analiz — pandas KULLANILMAZ.
-    v3: Önce _bulk_hist_cache'e bakar (prefetch_bulk_history ile doldurulmuş).
-    Cache'te yoksa tek hisse çeker (fallback).
+    RSI, MACD, Bollinger, EMA20/50/200, Stochastic, ATR, Williams %R, OBV
     """
     cached = _cache_get(_tech_cache, symbol, _TECH_TTL)
     if cached:
         return cached
 
     try:
-        # ── Veri kaynağı: önce bulk cache, yoksa tek çekim ──────────────────
-        if symbol in FOREX_SYMBOLS or symbol in CRYPTO_SYMBOLS or symbol in COMMODITY_SYMBOLS:
-            # Özel semboller doğrudan çekilir
-            yf_sym = (FOREX_SYMBOLS.get(symbol) or
-                      CRYPTO_SYMBOLS.get(symbol) or
-                      COMMODITY_SYMBOLS.get(symbol))
-            ticker = yf.Ticker(yf_sym)
-            hist = ticker.history(period=period)
-        else:
-            # BIST hisseleri: bulk cache kullan
-            hist = _get_hist_from_cache(symbol, period)
+        yf_sym = f"{symbol}.IS"
+        if symbol in FOREX_SYMBOLS:
+            yf_sym = FOREX_SYMBOLS[symbol]
+        elif symbol in CRYPTO_SYMBOLS:
+            yf_sym = CRYPTO_SYMBOLS[symbol]
+        elif symbol in COMMODITY_SYMBOLS:
+            yf_sym = COMMODITY_SYMBOLS[symbol]
 
-        if hist is None or hist.empty or len(hist) < 50:
+        ticker = yf.Ticker(yf_sym)
+        hist = ticker.history(period=period)
+
+        if hist.empty or len(hist) < 50:
             return {'error': 'Yeterli veri yok (min 50 gün)', 'rsi': None, 'symbol': symbol}
 
         close  = list(hist['Close'].values.tolist())
@@ -559,7 +446,7 @@ def get_technical_indicators(symbol: str, period: str = '1y') -> dict:
 
         cur = close[-1]
 
-        # ── RSI ──────────────────────────────────────────────────────────────
+        # ── RSI (EWM com=13 ≈ Wilder 14) ────────────────────────────────────
         deltas = [close[i] - close[i-1] for i in range(1, n)]
         gains  = [max(d, 0) for d in deltas]
         losses = [-min(d, 0) for d in deltas]
@@ -577,7 +464,7 @@ def get_technical_indicators(symbol: str, period: str = '1y') -> dict:
         rsi_prev = round(rsi_list[-2], 1) if len(rsi_list) > 1 else rsi
         rsi_5d   = round(mean(rsi_list[-5:]), 1)
 
-        # ── MACD ─────────────────────────────────────────────────────────────
+        # ── MACD (12, 26, 9) ────────────────────────────────────────────────
         ema12_list   = _ema(close, 12)
         ema26_list   = _ema(close, 26)
         macd_list    = [a - b for a, b in zip(ema12_list, ema26_list)]
@@ -593,7 +480,7 @@ def get_technical_indicators(symbol: str, period: str = '1y') -> dict:
         macd_crossunder = (macd_hist < 0 and macd_hist_p >= 0)
         macd_momentum   = 'artiyor' if macd_hist > macd_hist_p else 'azaliyor'
 
-        # ── EMA ──────────────────────────────────────────────────────────────
+        # ── EMA20 / EMA50 / EMA200 ──────────────────────────────────────────
         ema20  = _ema(close, 20)[-1]
         ema50  = _ema(close, 50)[-1] if n >= 50 else ema20
         ema200 = _ema(close, 200)[-1] if n >= 200 else ema50
@@ -611,7 +498,7 @@ def get_technical_indicators(symbol: str, period: str = '1y') -> dict:
 
         trend_guc = round(abs((ema20 - ema50) / ema50) * 100, 2) if ema50 else 0
 
-        # ── Bollinger ────────────────────────────────────────────────────────
+        # ── Bollinger Bands (20 gün, 2 std) ─────────────────────────────────
         bb_mid_list = _sma(close, 20)
         bb_mid_v    = bb_mid_list[-1]
         recent_20   = close[-20:]
@@ -629,7 +516,7 @@ def get_technical_indicators(symbol: str, period: str = '1y') -> dict:
             bb_pct = (cur - bb_lower) / (bb_upper - bb_lower) * 100 if (bb_upper - bb_lower) else 50
             bb_position = f'bant_ici_{round(bb_pct)}pct'
 
-        # ── Stochastic ───────────────────────────────────────────────────────
+        # ── Stochastic ──────────────────────────────────────────────────────
         def stoch_k_raw_val(i):
             l14 = min(low[max(0, i-13):i+1])
             h14 = max(high[max(0, i-13):i+1])
@@ -649,13 +536,13 @@ def get_technical_indicators(symbol: str, period: str = '1y') -> dict:
         stoch_crossunder = (stoch_k < stoch_d and stoch_k_p >= stoch_d)
         stoch_signal     = 'asiri_satim' if stoch_k < 20 else ('asiri_alim' if stoch_k > 80 else 'normal')
 
-        # ── Williams %R ──────────────────────────────────────────────────────
+        # ── Williams %R ─────────────────────────────────────────────────────
         h14w = max(high[-14:])
         l14w = min(low[-14:])
         will_r = round(-100 * (h14w - cur) / (h14w - l14w + 1e-10), 1)
         will_signal = 'asiri_satim' if will_r < -80 else ('asiri_alim' if will_r > -20 else 'normal')
 
-        # ── ATR ──────────────────────────────────────────────────────────────
+        # ── ATR (14 gün EWM) ────────────────────────────────────────────────
         tr_list = []
         for i in range(1, n):
             hl = high[i] - low[i]
@@ -666,7 +553,7 @@ def get_technical_indicators(symbol: str, period: str = '1y') -> dict:
         atr     = round(atr_list[-1], 2)
         atr_pct = round(atr / cur * 100, 2) if cur else 0
 
-        # ── OBV ──────────────────────────────────────────────────────────────
+        # ── OBV ─────────────────────────────────────────────────────────────
         obv = 0
         obv_list = [0]
         for i in range(1, n):
@@ -677,7 +564,7 @@ def get_technical_indicators(symbol: str, period: str = '1y') -> dict:
             obv_list.append(obv)
         obv_trend = 'yukari' if obv_list[-1] > obv_list[-5] else 'asagi'
 
-        # ── Hacim ────────────────────────────────────────────────────────────
+        # ── Hacim Analizi ────────────────────────────────────────────────────
         vol_avg20  = mean(volume[-20:]) if volume[-20:] else 1
         vol_today  = volume[-1]
         vol_ratio  = round(vol_today / vol_avg20, 2) if vol_avg20 > 0 else 1
