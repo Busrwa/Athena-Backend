@@ -388,7 +388,7 @@ def get_fundamental_data(symbol: str) -> dict:
             'roe':              round(roe * 100, 2)  if roe      else None,
             'roa':              round(roa * 100, 2)  if roa      else None,
             'debt_to_equity':   round(debt_eq, 1)    if debt_eq  else None,
-            'dividend_yield':   round(div_yld * 100, 2) if div_yld else None,
+            'dividend_yield':   round(div_yld * 100, 2) if div_yld and div_yld * 100 <= 30 else None,
             'eps':              round(eps, 2)         if eps      else None,
             'revenue_growth':   round(rev_g * 100, 2)  if rev_g  else None,
             'earnings_growth':  round(earn_g * 100, 2) if earn_g else None,
