@@ -21,6 +21,7 @@ urlpatterns = [
     path('butce/gecmis/',        budget_views.butce_gecmis),
     path('butce/pozisyon/<int:pozisyon_id>/alindi/',  budget_views.pozisyon_alindi),
     path('butce/pozisyon/<int:pozisyon_id>/kapat/',   budget_views.pozisyon_kapat),
+    path('butce/pozisyon/<int:pozisyon_id>/sil/',     budget_views.pozisyon_sil),
 
     # ── Paper Trading (Sanal İşlem) ───────────────────────────────────────
     path('paper/ac/',                       paper_trading.pozisyon_ac),           # POST

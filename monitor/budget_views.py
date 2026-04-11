@@ -571,3 +571,25 @@ def butce_gecmis(request):
         'toplam_kaz_kayip_tl': round(toplam_kaz, 2),
         'pozisyonlar': data,
     })
+
+
+# ─── Bekleyen Pozisyonu Sil ──────────────────────────────────────────────────
+
+@api_view(['DELETE'])
+def pozisyon_sil(request, pozisyon_id):
+    """
+    DELETE /api/monitor/butce/pozisyon/<id>/sil/
+    Sadece 'bekliyor' durumundaki pozisyonları siler.
+    Açık pozisyonlar silinemez, önce kapat.
+    """
+    try:
+        pos = BudgetPosition.objects.get(id=pozisyon_id)
+    except BudgetPosition.DoesNotExist:
+        return Response({'error': 'Pozisyon bulunamadı'}, status=404)
+
+    if pos.durum == 'acik':
+        return Response({'error': 'Açık pozisyon silinemez. Önce "Kapat" işlemi yapın.'}, status=400)
+
+    sembol = pos.sembol
+    pos.delete()
+    return Response({'status': 'silindi', 'sembol': sembol, 'mesaj': f'{sembol} pozisyonu silindi.'})
