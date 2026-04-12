@@ -2,16 +2,17 @@ from django.urls import path
 from . import views
 from . import budget_views
 from . import paper_trading
+from . import push_views
 
 urlpatterns = [
     # ── Mevcut Endpointler ────────────────────────────────────────────────
-    path('scan/',                views.run_scan),              # POST — Manuel tarama
-    path('scan/results/',        views.full_scan_results),     # GET  — Tüm skorlar
-    path('alerts/',              views.alert_history),         # GET  — Uyarı geçmişi
-    path('market/',              views.market_dashboard),      # GET  — Piyasa paneli
-    path('commodities/',         views.commodity_overview),    # GET  — Emtia/Döviz
-    path('invest/',              views.investment_advisor),    # POST — Yatırım danışmanı
-    path('plans/',               views.active_plans),          # GET  — Aktif planlar
+    path('scan/',                views.run_scan),
+    path('scan/results/',        views.full_scan_results),
+    path('alerts/',              views.alert_history),
+    path('market/',              views.market_dashboard),
+    path('commodities/',         views.commodity_overview),
+    path('invest/',              views.investment_advisor),
+    path('plans/',               views.active_plans),
     path('plans/<str:symbol>/deactivate/', views.deactivate_plan),
 
     # ── Bütçe Yönetimi ────────────────────────────────────────────────────
@@ -24,11 +25,15 @@ urlpatterns = [
     path('butce/pozisyon/<int:pozisyon_id>/sil/',     budget_views.pozisyon_sil),
 
     # ── Paper Trading (Sanal İşlem) ───────────────────────────────────────
-    path('paper/ac/',                       paper_trading.pozisyon_ac),           # POST
-    path('paper/pozisyonlar/',              paper_trading.pozisyonlar),            # GET
-    path('paper/guncelle/<int:pozisyon_id>/', paper_trading.pozisyon_guncelle),   # POST
-    path('paper/hepsi-guncelle/',           paper_trading.hepsini_guncelle),      # POST
-    path('paper/istatistik/',               paper_trading.istatistik),            # GET
-    path('paper/kapat/<int:pozisyon_id>/',  paper_trading.pozisyon_kapat_manuel), # POST
-    path('paper/backtest/',                 paper_trading.backtest),               # POST
+    path('paper/ac/',                       paper_trading.pozisyon_ac),
+    path('paper/pozisyonlar/',              paper_trading.pozisyonlar),
+    path('paper/guncelle/<int:pozisyon_id>/', paper_trading.pozisyon_guncelle),
+    path('paper/hepsi-guncelle/',           paper_trading.hepsini_guncelle),
+    path('paper/istatistik/',               paper_trading.istatistik),
+    path('paper/kapat/<int:pozisyon_id>/',  paper_trading.pozisyon_kapat_manuel),
+    path('paper/backtest/',                 paper_trading.backtest),
+
+    # ── Push Notification ─────────────────────────────────────────────────
+    path('push/register/',      push_views.push_register),
+    path('push/test/',          push_views.push_test),
 ]

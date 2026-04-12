@@ -15,6 +15,7 @@ from stocks.services import (
     ALL_BIST_STOCKS,
 )
 from monitor.scanner import compute_score, _get_signal_label
+from monitor.push_service import push_stop_loss, push_hedef, push_momentum, push_guclu_sat
 from monitor.models import BudgetPlan, BudgetPosition
 
 GROQ_MODEL = "llama-3.3-70b-versatile"
@@ -69,7 +70,7 @@ def butce_olustur(request):
     adaylar = []
     hatalar = []
 
-    taranacak = ALL_BIST_STOCKS[:80]  # En likit 80 hisse (hız için)
+    taranacak = ALL_BIST_STOCKS  # Tüm BIST hisseleri taranır
 
     for sembol in taranacak:
         try:
@@ -337,26 +338,73 @@ def butce_durum(request):
         puan, gerekceler = compute_score(tech, stock)
         sinyal_label = _get_signal_label(puan)
 
-        # Otomatik stop/hedef kontrolü
+        # Otomatik stop/hedef kontrolü + Momentum bozulması tespiti
         acil_uyari = None
         tavsiye = 'TUT'
         rp = RISK_PARAMS.get(pos.plan.risk_profili, RISK_PARAMS['orta'])
 
         if pos.durum == 'acik':
+            rsi = tech.get('rsi')
+            macd_hist = tech.get('macd_histogram', 0) or 0
+            macd_hist_prev = tech.get('macd_hist_prev', macd_hist)
+            bb_pos = tech.get('bb_position', '')
+            trend = tech.get('trend', 'yatay')
+            kaz_pct = kaz_kayip_pct  # pozisyonun mevcut K/Z yüzdesi
+
             if guncel_fiyat <= float(pos.stop_fiyat):
                 acil_uyari = f"🔴 STOP-LOSS! Fiyat ({guncel_fiyat}) stop seviyesinin ({float(pos.stop_fiyat)}) altına indi. HEMEN SAT!"
                 tavsiye = 'SAT'
                 uyarilar.append(acil_uyari)
+                push_stop_loss(pos.sembol, guncel_fiyat, kaz_kayip_pct)
             elif guncel_fiyat >= float(pos.hedef_fiyat):
                 acil_uyari = f"🎯 HEDEF TUTTU! Fiyat ({guncel_fiyat}) hedefe ({float(pos.hedef_fiyat)}) ulaştı. Sat veya kısmi sat düşün!"
                 tavsiye = 'SAT'
                 uyarilar.append(acil_uyari)
+                push_hedef(pos.sembol, guncel_fiyat, kaz_kayip_pct)
             elif puan <= -4:
                 acil_uyari = f"⚠️ GÜÇLÜ SAT sinyali (skor {puan}). Stop gelmeden satmayı düşün."
                 tavsiye = 'SAT'
                 uyarilar.append(acil_uyari)
+                push_guclu_sat(pos.sembol, puan)
+
+            # ── Momentum Bozulması Tespiti ────────────────────────────────
+            # Hedefe ulaşmadan önce dönüş riski varsa erken uyar
+            elif kaz_pct > 0:  # Kârda olan pozisyonlarda izle
+                momentum_uyari = []
+
+                # RSI aşırı alıma girdi (>70) — dönüş riski
+                if rsi and rsi > 70:
+                    momentum_uyari.append(f"RSI {rsi:.0f} aşırı alım bölgesinde")
+
+                # MACD histogramı düşmeye başladı (tepe oluşumu)
+                if macd_hist > 0 and macd_hist < macd_hist_prev and macd_hist_prev > 0:
+                    momentum_uyari.append("MACD momentumu zayıflıyor")
+
+                # Bollinger üst bandını aştı
+                if 'ust_band_ustunde' in bb_pos:
+                    momentum_uyari.append("Bollinger üst bandını aştı")
+
+                # Trend bozuldu
+                if trend in ('asagi', 'guclu_asagi'):
+                    momentum_uyari.append("Trend aşağı döndü")
+
+                # 2 veya daha fazla momentum bozulması sinyali → DİKKAT
+                if len(momentum_uyari) >= 2:
+                    acil_uyari = f"⚡ MOMENTUM BOZULUYOR! {' | '.join(momentum_uyari)}. Hedefe ulaşmadan dönüş riski. Kısmi satış düşün."
+                    tavsiye = 'DİKKAT'
+                    uyarilar.append(acil_uyari)
+                    push_momentum(pos.sembol, acil_uyari)
+                elif len(momentum_uyari) == 1 and kaz_pct >= rp['hedef'] * 0.6:
+                    # Hedefe %60 yaklaşmış + 1 uyarı → DİKKAT
+                    acil_uyari = f"⚡ Hedefe yaklaşıldı (%{kaz_pct:.1f}/{rp['hedef']}%) ama {momentum_uyari[0]}. Dikkatli izle."
+                    tavsiye = 'DİKKAT'
+                    uyarilar.append(acil_uyari)
+                elif puan >= 3:
+                    tavsiye = 'TUT_AL'  # güçlü, tutmaya devam
+                elif kaz_kayip_pct <= -(rp['stop'] * 0.8):
+                    tavsiye = 'DİKKAT'
             elif puan >= 3:
-                tavsiye = 'TUT_AL'  # güçlü, tutmaya devam
+                tavsiye = 'TUT_AL'
             elif kaz_kayip_pct <= -(rp['stop'] * 0.8):
                 tavsiye = 'DİKKAT'
 
@@ -483,7 +531,7 @@ def yeni_firsat_tara(request):
     rp = RISK_PARAMS.get(risk_profili, RISK_PARAMS['orta'])
     adaylar = []
 
-    for sembol in ALL_BIST_STOCKS[:80]:
+    for sembol in ALL_BIST_STOCKS:
         if sembol in mevcut_semboller:
             continue
         try:
