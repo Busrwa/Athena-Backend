@@ -21,7 +21,8 @@ POPULAR_BIST_STOCKS = [
     'NTHOL', 'ODAS', 'EUPWR', 'MAVI', 'BRSAN',
 ]
 
-# KOZAL, KOZAA, ANACM, KRSAN — Yahoo Finance'de delisted, kaldırıldı
+# Delisted hisseler kaldırıldı: KOZAL, KOZAA, ANACM, KRSAN, MIPAZ, NTTUR, NVSN,
+# PEHOL, RHEAG, SAGYO, SNKRN, TUDDF, TURGZ, UNYEC, UZERB, VBTS, YGYO
 ALL_BIST_STOCKS = [
     # BIST30
     'THYAO', 'GARAN', 'AKBNK', 'EREGL', 'BIMAS',
@@ -43,28 +44,28 @@ ALL_BIST_STOCKS = [
     'KRPLS', 'KRVGD', 'KTSKR', 'KUTPO',
     'LMKDC', 'LUKSK', 'LYDHO', 'MACKO', 'MAKIM',
     'MAKTK', 'MANAS', 'MEGMT', 'MEPET', 'MERCN',
-    'MERIT', 'MERKO', 'METRO', 'MIATK', 'MIPAZ',
+    'MERIT', 'MERKO', 'METRO', 'MIATK',
     'MMCAS', 'MOBTL', 'MPARK', 'MSGYO', 'MTRKS',
-    'NATEN', 'NETAS', 'NTTUR', 'NUGYO', 'NUHCM',
-    'NVSN',  'OBASE', 'ODINE', 'ONCSM', 'ORCAY',
+    'NATEN', 'NETAS', 'NUGYO', 'NUHCM',
+    'OBASE', 'ODINE', 'ONCSM', 'ORCAY',
     'ORGE',  'OSMEN', 'OSTIM', 'OTKAR', 'OYAKC',
     'OYLUM', 'OZGYO', 'OZKGY', 'OZRDN', 'PAGYO',
-    'PAPIL', 'PARSN', 'PASEU', 'PCILT', 'PEHOL',
+    'PAPIL', 'PARSN', 'PASEU', 'PCILT',
     'PENGD', 'PETUN', 'PKART', 'PNLSN', 'POLHO',
     'PRDGS', 'PRKAB', 'PRKME', 'PRZMA', 'PSDTC',
-    'QUAGR', 'RAYSG', 'RHEAG', 'RNPOL', 'RODRG',
-    'RTALB', 'RUBNS', 'RYSAS', 'SAFKR', 'SAGYO',
+    'QUAGR', 'RAYSG', 'RNPOL', 'RODRG',
+    'RTALB', 'RUBNS', 'RYSAS', 'SAFKR',
     'SARKY', 'SASA',  'SELEC', 'SEYKM', 'SILVR',
-    'SKBNK', 'SNGYO', 'SNKRN', 'SNPAM',
+    'SKBNK', 'SNGYO', 'SNPAM',
     'SODSN', 'SOKE',  'SOKM',  'SONME', 'SRVGY',
     'SUMAS', 'SUWEN', 'TATGD', 'TATEN',
     'TBORG', 'TDGYO', 'TEKTU', 'TEZOL', 'TGSAS',
     'TKNSA', 'TLMAN', 'TMSN',  'TNZTP',
     'TRCAS', 'TRGYO', 'TRILC', 'TSPOR',
-    'TTRAK', 'TUCLK', 'TUDDF', 'TUKAS', 'TURGZ',
-    'TURSG', 'ULKER', 'UMPAS', 'UNYEC', 'USAK',
-    'UZERB', 'VBTS',  'VERUS', 'VKGYO',
-    'VKING', 'YAPRK', 'YATAS', 'YAYLA', 'YGYO',
+    'TTRAK', 'TUCLK', 'TUKAS',
+    'TURSG', 'ULKER', 'UMPAS', 'USAK',
+    'VERUS', 'VKGYO', 'VKING',
+    'YAPRK', 'YATAS', 'YAYLA',
     'YKSLN', 'YONGA', 'YUNSA', 'ZOREN', 'ZRGYO',
 ]
 
@@ -315,20 +316,27 @@ def get_fundamental_data(symbol: str) -> dict:
         ticker = yf.Ticker(f"{symbol}.IS")
         info = ticker.info
 
-        pe      = info.get('trailingPE')
-        pb      = info.get('priceToBook')
-        ps      = info.get('priceToSalesTrailing12Months')
-        roe     = info.get('returnOnEquity')
-        roa     = info.get('returnOnAssets')
-        debt_eq = info.get('debtToEquity')
-        div_yld = info.get('dividendYield')
-        eps     = info.get('trailingEps')
-        rev_g   = info.get('revenueGrowth')
-        earn_g  = info.get('earningsGrowth')
-        curr_r  = info.get('currentRatio')
-        gross_m = info.get('grossMargins')
-        oper_m  = info.get('operatingMargins')
-        net_m   = info.get('profitMargins')
+        # Güvenli float dönüşümü — yfinance bazen string döndürüyor
+        def _f(val):
+            try:
+                return float(val) if val is not None else None
+            except (TypeError, ValueError):
+                return None
+
+        pe      = _f(info.get('trailingPE'))
+        pb      = _f(info.get('priceToBook'))
+        ps      = _f(info.get('priceToSalesTrailing12Months'))
+        roe     = _f(info.get('returnOnEquity'))
+        roa     = _f(info.get('returnOnAssets'))
+        debt_eq = _f(info.get('debtToEquity'))
+        div_yld = _f(info.get('dividendYield'))
+        eps     = _f(info.get('trailingEps'))
+        rev_g   = _f(info.get('revenueGrowth'))
+        earn_g  = _f(info.get('earningsGrowth'))
+        curr_r  = _f(info.get('currentRatio'))
+        gross_m = _f(info.get('grossMargins'))
+        oper_m  = _f(info.get('operatingMargins'))
+        net_m   = _f(info.get('profitMargins'))
         mkt_cap   = info.get('marketCap')
         sector    = info.get('sector', '')
         industry  = info.get('industry', '')
