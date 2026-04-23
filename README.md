@@ -31,3 +31,11 @@ pip install -r requirements.txt
 python manage.py migrate
 python manage.py runserver
 ```
+
+## ⚠️ Disclaimer
+This API is for personal use only and does not constitute financial advice.
+All investment decisions are the sole responsibility of the user.
+Technical analysis is based on historical data and does not guarantee future results.
+
+## 📄 License
+MIT License — see LICENSE file for details.
